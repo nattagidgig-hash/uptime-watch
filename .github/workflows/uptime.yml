@@ -1,0 +1,39 @@
+name: uptime-check
+
+# ตัวเฝ้าระวัง "จากนอกบ้าน" — ถ้าเครื่องนี้หรือเน็ตบ้านล่ม GitHub จะยิงอีเมลแจ้ง
+on:
+  schedule:
+    - cron: '*/30 * * * *'   # ทุก 30 นาที (UTC)
+  workflow_dispatch:
+    inputs:
+      url:
+        description: 'URL ที่จะยิงทดสอบ (เว้นว่าง = ใช้ค่าเริ่มต้น)'
+        required: false
+        default: ''
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: ยิงเว็บ 3 ครั้ง ถ้าไม่ตอบ 200 ถือว่าล่ม
+        run: |
+          set -u
+          URL="${{ github.event.inputs.url }}"
+          if [ -z "$URL" ]; then URL="https://hermes-linux.basa-ide.ts.net/"; fi
+          echo "ตรวจ: $URL"
+
+          LAST=000
+          for i in 1 2 3; do
+            CODE=$(curl -4 -s -o /dev/null -w '%{http_code}' --max-time 20 "$URL" || echo 000)
+            echo "ครั้งที่ $i → HTTP $CODE"
+            LAST="$CODE"
+            [ "$CODE" = "200" ] && break
+            sleep 15
+          done
+
+          if [ "$LAST" != "200" ]; then
+            echo "::error::เว็บไม่ตอบ (HTTP $LAST) — เซิร์ฟเวอร์หรือเน็ตบ้านมีปัญหา"
+            exit 1
+          fi
+          echo "✅ ปกติ (HTTP 200)"
